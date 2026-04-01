@@ -248,6 +248,40 @@ def _nuke_studio_hooks():
 _nuke_studio_hooks()
 
 
+def _wrap_model_for_tracking(agent, token_tracker: TokenTracker) -> None:
+    """Wrap the agent's model __call__ to capture token usage from ChatResponse."""
+    model = getattr(agent, '_model', None) or getattr(agent, 'model', None)
+    if model is None:
+        return
+    original_call = model.__call__
+
+    async def _tracked_call(*args, **kwargs):
+        result = await original_call(*args, **kwargs)
+        # Handle streaming: wrap the async generator
+        if hasattr(result, '__aiter__'):
+            async def _tracking_stream():
+                last_chunk = None
+                async for chunk in result:
+                    last_chunk = chunk
+                    yield chunk
+                # Extract usage from the last chunk
+                if last_chunk is not None and hasattr(last_chunk, 'usage') and last_chunk.usage:
+                    token_tracker.add(
+                        input_tokens=getattr(last_chunk.usage, 'input_tokens', 0) or 0,
+                        output_tokens=getattr(last_chunk.usage, 'output_tokens', 0) or 0,
+                    )
+            return _tracking_stream()
+        # Non-streaming: extract usage directly
+        if hasattr(result, 'usage') and result.usage:
+            token_tracker.add(
+                input_tokens=getattr(result.usage, 'input_tokens', 0) or 0,
+                output_tokens=getattr(result.usage, 'output_tokens', 0) or 0,
+            )
+        return result
+
+    model.__call__ = _tracked_call
+
+
 async def _create_agent(
     config: CodeAgentConfig,
     ask_callback=None,
@@ -388,6 +422,9 @@ async def run_repl(
     try:
         agent, ctx = await _create_agent(config, ask_callback=ask_user_callback)
         _nuke_studio_hooks()  # Re-nuke after agent creation
+
+        # Wrap model.__call__ to capture token usage
+        _wrap_model_for_tracking(agent, ctx["token_tracker"])
     except Exception as e:
         render_error(f"Failed to initialize agent: {e}")
         import traceback
