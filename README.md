@@ -5,6 +5,11 @@ An AI coding agent built on [AgentScope](https://github.com/modelscope/agentscop
 
 <img width="726" height="465" alt="微信图片_2026-04-01_210346_822" src="https://github.com/user-attachments/assets/22cd17e8-f68c-435e-8a1e-210a2c70bc5b" />
 
+##Built-in Observability UI
+<img width="1257" height="1001" alt="微信图片_2026-04-01_212923_171" src="https://github.com/user-attachments/assets/9ceb8b61-62da-4265-899a-f0ab43ddc029" />
+
+<img width="1257" height="1001" alt="微信图片_2026-04-01_212951_813" src="https://github.com/user-attachments/assets/d2f7a7a9-939e-4175-afbf-0ba873b8d431" />
+
 ## Features
 
 - **Claude Code-style TUI** — Braille spinner, separator lines, multi-line status bar, Shift+Tab mode cycling
