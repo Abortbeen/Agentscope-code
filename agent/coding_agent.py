@@ -120,16 +120,18 @@ def create_model_and_formatter(
 
 
 def _patch_anthropic_formatter(formatter: FormatterBase) -> None:
-    """Patch AnthropicChatFormatter to ensure tool result blocks include 'type'.
+    """Patch AnthropicChatFormatter to ensure:
 
-    The Anthropic API requires each content block in tool_result to have
-    a 'type' field (e.g., {"type": "text", "text": "..."}), but AgentScope's
-    TextBlock may omit it.
+    1. Tool result content blocks always have a 'type' field.
+    2. Every tool_use has a matching tool_result immediately after it.
+       The Anthropic API strictly requires this pairing.
     """
     original_format = formatter._format
 
     async def _patched_format(msgs, **kwargs):
         result = await original_format(msgs, **kwargs)
+
+        # --- Fix 1: Ensure tool_result content blocks have 'type' ---
         for msg in result:
             if msg.get("role") == "user" and isinstance(msg.get("content"), list):
                 for block in msg["content"]:
@@ -140,7 +142,52 @@ def _patch_anthropic_formatter(formatter: FormatterBase) -> None:
                                 if isinstance(item, dict) and "type" not in item:
                                     if "text" in item:
                                         item["type"] = "text"
-        return result
+
+        # --- Fix 2: Ensure every tool_use has a matching tool_result ---
+        # Collect all tool_result ids present in the entire conversation
+        all_result_ids = set()
+        for msg in result:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    tid = block.get("tool_use_id")
+                    if tid:
+                        all_result_ids.add(tid)
+
+        # Walk messages and inject dummy tool_results where missing
+        repaired = []
+        for msg in result:
+            repaired.append(msg)
+
+            if msg.get("role") != "assistant":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+
+            missing_ids = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tid = block.get("id")
+                    if tid and tid not in all_result_ids:
+                        missing_ids.append(tid)
+
+            if missing_ids:
+                repaired.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tid,
+                            "content": [{"type": "text", "text": "(no result)"}],
+                        }
+                        for tid in missing_ids
+                    ],
+                })
+
+        return repaired
 
     formatter._format = _patched_format
 
