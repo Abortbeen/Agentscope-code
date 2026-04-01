@@ -248,38 +248,55 @@ def _nuke_studio_hooks():
 _nuke_studio_hooks()
 
 
-def _wrap_model_for_tracking(agent, token_tracker: TokenTracker) -> None:
-    """Wrap the agent's model __call__ to capture token usage from ChatResponse."""
-    model = getattr(agent, '_model', None) or getattr(agent, 'model', None)
-    if model is None:
-        return
-    original_call = model.__call__
+class _TrackedModel:
+    """Proxy that wraps a model to capture token usage from ChatResponse."""
 
-    async def _tracked_call(*args, **kwargs):
-        result = await original_call(*args, **kwargs)
+    def __init__(self, model, tracker: TokenTracker):
+        self._inner = model
+        self._tracker = tracker
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    async def __call__(self, *args, **kwargs):
+        result = await self._inner(*args, **kwargs)
         # Handle streaming: wrap the async generator
         if hasattr(result, '__aiter__'):
+            tracker = self._tracker
+
             async def _tracking_stream():
                 last_chunk = None
                 async for chunk in result:
                     last_chunk = chunk
                     yield chunk
-                # Extract usage from the last chunk
                 if last_chunk is not None and hasattr(last_chunk, 'usage') and last_chunk.usage:
-                    token_tracker.add(
+                    tracker.add(
                         input_tokens=getattr(last_chunk.usage, 'input_tokens', 0) or 0,
                         output_tokens=getattr(last_chunk.usage, 'output_tokens', 0) or 0,
                     )
             return _tracking_stream()
         # Non-streaming: extract usage directly
         if hasattr(result, 'usage') and result.usage:
-            token_tracker.add(
+            self._tracker.add(
                 input_tokens=getattr(result.usage, 'input_tokens', 0) or 0,
                 output_tokens=getattr(result.usage, 'output_tokens', 0) or 0,
             )
         return result
 
-    model.__call__ = _tracked_call
+
+def _wrap_model_for_tracking(agent, token_tracker: TokenTracker) -> None:
+    """Replace agent's model with a tracking proxy."""
+    inner_agent = getattr(agent, '_agent', None)
+    if inner_agent is None:
+        return
+    model = getattr(inner_agent, 'model', None)
+    if model is None:
+        return
+    tracked = _TrackedModel(model, token_tracker)
+    inner_agent.model = tracked
+    # Also update the outer reference
+    if hasattr(agent, '_model'):
+        agent._model = tracked
 
 
 async def _create_agent(
