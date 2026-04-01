@@ -1,8 +1,9 @@
 # Agentscope-Code
 
 An AI coding agent built on [AgentScope](https://github.com/modelscope/agentscope) with Claude Code-style UI and oh-my-claudecode integration.
-<img width="726" height="465" alt="微信图片_2026-04-01_210346_822" src="https://github.com/user-attachments/assets/22cd17e8-f68c-435e-8a1e-210a2c70bc5b" />
 
+
+<img width="726" height="465" alt="微信图片_2026-04-01_210346_822" src="https://github.com/user-attachments/assets/22cd17e8-f68c-435e-8a1e-210a2c70bc5b" />
 
 ## Features
 
