@@ -16,6 +16,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style as PTStyle
+from prompt_toolkit.patch_stdout import patch_stdout
 
 from .commands import CommandRegistry
 from .renderer import (
@@ -677,57 +678,88 @@ async def run_repl(
         )
         return
 
-    # Main REPL loop — double Ctrl+C to exit (like Claude Code)
+    # Main REPL loop — agent runs in background, prompt stays active
     import time
     _last_ctrl_c = 0.0
+    _agent_task: asyncio.Task | None = None
+    _input_queue: list[str] = []
 
-    while True:
-        try:
-            # Separator line above ❯ (scrolls naturally with conversation)
-            console.print(f"[dim]{'─' * _get_term_width()}[/dim]")
+    async def _run_queued(text_: str) -> None:
+        """Process input and then drain any queued messages."""
+        await _process_input(text_, agent, commands, ctx)
+        while _input_queue:
+            next_text = _input_queue.pop(0)
+            ctx["_current_input"] = next_text
+            await _process_input(next_text, agent, commands, ctx)
 
-            # ❯ prompt with status toolbar below
-            user_input = await prompt_session.prompt_async(
-                _build_prompt,
-                bottom_toolbar=_build_toolbar,
-            )
+    with patch_stdout():
+        while True:
+            try:
+                # Separator line above ❯ (scrolls naturally with conversation)
+                console.print(f"[dim]{'─' * _get_term_width()}[/dim]")
 
-            if not user_input or not user_input.strip():
-                continue
-            ctx["_current_input"] = user_input.strip()
-            await _process_input(user_input.strip(), agent, commands, ctx)
+                # ❯ prompt with status toolbar below
+                user_input = await prompt_session.prompt_async(
+                    _build_prompt,
+                    bottom_toolbar=_build_toolbar,
+                )
 
-        except KeyboardInterrupt:
-            now = time.time()
-            if now - _last_ctrl_c < 1.5:
-                # Double Ctrl+C within 1.5s → exit
+                if not user_input or not user_input.strip():
+                    continue
+
+                stripped = user_input.strip()
+                ctx["_current_input"] = stripped
+
+                # If agent is busy, queue the input
+                if _agent_task and not _agent_task.done():
+                    _input_queue.append(stripped)
+                    console.print("[dim]⏳ Queued — will process after current response.[/dim]")
+                    continue
+
+                # Process in background so prompt stays active
+                _agent_task = asyncio.create_task(_run_queued(stripped))
+
+            except KeyboardInterrupt:
+                now = time.time()
+                # Cancel running agent task on first Ctrl+C
+                if _agent_task and not _agent_task.done():
+                    _agent_task.cancel()
+                    console.print("\n[dim]Response interrupted.[/dim]")
+                    _last_ctrl_c = now
+                    continue
+                if now - _last_ctrl_c < 1.5:
+                    # Double Ctrl+C within 1.5s → exit
+                    session_mgr.save_session(
+                        session_id=session_id,
+                        metadata={"model": config.model.model_name},
+                    )
+                    render_info("Session saved. Goodbye!")
+                    break
+                else:
+                    _last_ctrl_c = now
+                    console.print("\n[dim]Press Ctrl+C again to exit.[/dim]")
+                    continue
+            except EOFError:
+                # Ctrl+D also exits gracefully
+                if _agent_task and not _agent_task.done():
+                    _agent_task.cancel()
                 session_mgr.save_session(
                     session_id=session_id,
                     metadata={"model": config.model.model_name},
                 )
                 render_info("Session saved. Goodbye!")
                 break
-            else:
-                _last_ctrl_c = now
-                console.print("\n[dim]Press Ctrl+C again to exit.[/dim]")
-                continue
-        except EOFError:
-            # Ctrl+D also exits gracefully
-            session_mgr.save_session(
-                session_id=session_id,
-                metadata={"model": config.model.model_name},
-            )
-            render_info("Session saved. Goodbye!")
-            break
-        except SystemExit:
-            session_mgr.save_session(
-                session_id=session_id,
-                metadata={"model": config.model.model_name},
-            )
-            render_info("Session saved. Goodbye!")
-            break
-        except Exception as e:
-            render_error(f"Unexpected error: {e}")
+            except SystemExit:
+                if _agent_task and not _agent_task.done():
+                    _agent_task.cancel()
+                session_mgr.save_session(
+                    session_id=session_id,
+                    metadata={"model": config.model.model_name},
+                )
+                render_info("Session saved. Goodbye!")
+                break
+            except Exception as e:
+                render_error(f"Unexpected error: {e}")
 
     # Cleanup
     try:
