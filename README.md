@@ -27,55 +27,82 @@ An AI coding agent built on [AgentScope](https://github.com/modelscope/agentscop
 
 ## Quick Start
 
+### Binary (no Python required)
+
+Download from [Releases](https://github.com/Abortbeen/Agentscope-code/releases):
+
 ```bash
-# Install dependencies
-pip install agentscope prompt_toolkit rich
+# Linux
+chmod +x agentscope-code-linux-x64
+./agentscope-code-linux-x64
+
+# macOS
+chmod +x agentscope-code-macos-arm64
+./agentscope-code-macos-arm64
+```
+
+### pip install
+
+```bash
+pip install agentscope-code
 
 # Set your API key
 export ANTHROPIC_API_KEY=your-key-here
 # or
 export OPENAI_API_KEY=your-key-here
 
-# Run (default REPL)
-python -m codeagent
+# Run (two equivalent commands, like `claude`)
+agentscope-code
+asc
+```
 
-# Or with explicit run subcommand
-python -m codeagent run
+### From source
+
+```bash
+git clone https://github.com/Abortbeen/Agentscope-code.git
+cd Agentscope-code
+pip install .
+
+# Now you have the CLI commands
+agentscope-code
+asc
 ```
 
 ## Launch Modes
 
 ```bash
-# Basic REPL
+# Basic REPL (all equivalent)
+agentscope-code
+asc
 python -m codeagent run
 
 # With AgentScope Studio (web UI for monitoring)
-python -m codeagent run --studio auto          # Auto-launch Studio
-python -m codeagent run --studio http://host    # Connect to existing Studio
-python -m codeagent run --studio-port 7860      # Custom Studio port
+asc run --studio auto              # Auto-launch Studio
+asc run --studio http://host       # Connect to existing Studio
+asc run --studio-port 7860         # Custom Studio port
 
 # With A2A (Agent-to-Agent) protocol server
-python -m codeagent run --a2a                   # Enable A2A server
-python -m codeagent run --a2a-port 7861         # Custom A2A port
+asc run --a2a                      # Enable A2A server
+asc run --a2a-port 7861            # Custom A2A port
 
 # Studio + A2A together
-python -m codeagent run --studio auto --a2a
+asc run --studio auto --a2a
 
 # Specify model and provider
-python -m codeagent run --model claude-sonnet-4-20250514 --provider anthropic
-python -m codeagent run --model gpt-4o --provider openai
-python -m codeagent run --model qwen-max --provider dashscope
+asc run --model claude-sonnet-4-20250514 --provider anthropic
+asc run --model gpt-4o --provider openai
+asc run --model qwen-max --provider dashscope
 
 # Non-interactive mode (single prompt)
-python -m codeagent run --prompt "fix the bug in main.py"
-python -m codeagent "explain this codebase"
+asc run --prompt "fix the bug in main.py"
+asc "explain this codebase"
 
 # Resume a previous session
-python -m codeagent run --resume <session-id>
+asc run --resume <session-id>
 
 # Setup and migration
-python -m codeagent setup                       # Interactive setup wizard
-python -m codeagent migrate                     # Migrate from Claude Code config
+asc setup                          # Interactive setup wizard
+asc migrate                        # Migrate from Claude Code config
 ```
 
 ## TUI (Terminal UI)

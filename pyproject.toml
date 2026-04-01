@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentscope-code"
+version = "0.1.0"
+description = "An AI coding agent built on AgentScope with Claude Code-style TUI"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Abortbeen"},
+]
+keywords = ["ai", "coding-agent", "agentscope", "claude", "llm", "tui"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+    "agentscope>=0.1.0",
+    "prompt-toolkit>=3.0.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "shortuuid>=1.0.0",
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+all = [
+    "watchdog>=3.0.0",
+    "nbformat>=5.0.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Abortbeen/Agentscope-code"
+Repository = "https://github.com/Abortbeen/Agentscope-code"
+Issues = "https://github.com/Abortbeen/Agentscope-code/issues"
+
+[project.scripts]
+# Binary-style CLI commands (like `claude`)
+agentscope-code = "codeagent.__main__:main"
+asc = "codeagent.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["codeagent*"]
+
+[tool.setuptools.package-data]
+codeagent = [
+    "agents/*.md",
+    "skills/bundled/*.md",
+]

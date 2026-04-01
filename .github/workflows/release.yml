@@ -1,0 +1,180 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.1.0)'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: agentscope-code-linux-x64
+          - os: macos-latest
+            target: macos-x64
+            artifact: agentscope-code-macos-x64
+          - os: macos-14
+            target: macos-arm64
+            artifact: agentscope-code-macos-arm64
+          - os: windows-latest
+            target: windows-x64
+            artifact: agentscope-code-windows-x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller
+          pip install agentscope prompt-toolkit rich pydantic shortuuid requests
+          pip install watchdog nbformat beautifulsoup4
+
+      - name: Build binary with PyInstaller
+        run: |
+          pyinstaller \
+            --name agentscope-code \
+            --onefile \
+            --collect-all agentscope \
+            --collect-all prompt_toolkit \
+            --collect-all rich \
+            --collect-all pydantic \
+            --add-data "agents:codeagent/agents" \
+            --add-data "skills/bundled:codeagent/skills/bundled" \
+            --hidden-import codeagent \
+            --hidden-import codeagent.cli.repl \
+            --hidden-import codeagent.agent.coding_agent \
+            --hidden-import codeagent.tools.registry \
+            __main__.py
+        shell: bash
+
+      - name: Rename binary
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv dist/agentscope-code.exe dist/${{ matrix.artifact }}.exe
+          else
+            mv dist/agentscope-code dist/${{ matrix.artifact }}
+            chmod +x dist/${{ matrix.artifact }}
+          fi
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}*
+
+  build-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build wheel and sdist
+        run: |
+          pip install build
+          python -m build
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-packages
+          path: dist/*
+
+  release:
+    needs: [build-binaries, build-wheel]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git tag v${{ steps.version.outputs.version }} || true
+          git push origin v${{ steps.version.outputs.version }} || true
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find release-artifacts -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "agentscope-code-*" \) -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Agentscope-Code ${{ steps.version.outputs.version }}"
+          body: |
+            ## Agentscope-Code ${{ steps.version.outputs.version }}
+
+            AI coding agent built on AgentScope with Claude Code-style TUI.
+
+            ### Install
+
+            **Binary (no Python required):**
+            Download the binary for your platform below, then:
+            ```bash
+            chmod +x agentscope-code-linux-x64
+            ./agentscope-code-linux-x64
+            ```
+
+            **pip:**
+            ```bash
+            pip install agentscope_code-${{ steps.version.outputs.version }}-py3-none-any.whl
+            agentscope-code        # or: asc
+            ```
+
+            **From source:**
+            ```bash
+            git clone https://github.com/Abortbeen/Agentscope-code.git
+            cd Agentscope-code
+            pip install .
+            agentscope-code        # or: asc
+            ```
+
+            ### What's included
+            - 19 specialized agents (architect, debugger, planner, etc.)
+            - 35 skills (autopilot, ralph, ultrawork, etc.)
+            - Claude Code-style TUI with spinner, status bar, mode cycling
+            - Multi-provider: OpenAI, Anthropic, DashScope, Gemini, Ollama
+          files: release-files/*
+          draft: false
+          prerelease: false
