@@ -65,12 +65,14 @@ class _ThinkingSpinner:
     Uses raw ANSI escape sequences to update in-place,
     matching the Claude Code spinner style. Also renders a mini status bar
     below the spinner so context persists during agent processing.
+
+    Captures keyboard input during spinning so users can type ahead.
+    The typed text is shown in the ❯ prompt line and returned via
+    `get_type_ahead()` after stopping.
     """
 
     _CR = "\r"
     _CLEAR_LINE = "\033[2K"
-    _SAVE_CURSOR = "\0337"
-    _RESTORE_CURSOR = "\0338"
 
     def __init__(self, con: Console, label: str = "Thinking",
                  status_fn=None) -> None:
@@ -78,20 +80,32 @@ class _ThinkingSpinner:
         self._label = label
         self._running = False
         self._thread: threading.Thread | None = None
+        self._input_thread: threading.Thread | None = None
         self._frame_idx = 0
         self._status_fn = status_fn  # callable returning status lines string
         self._lines_written = 0
+        self._type_ahead: list[str] = []  # captured keystrokes
+        self._old_term_settings = None
 
     def start(self) -> None:
         self._running = True
+        self._type_ahead.clear()
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()
+        # Start non-blocking keyboard capture
+        self._input_thread = threading.Thread(target=self._capture_input, daemon=True)
+        self._input_thread.start()
 
     def stop(self) -> None:
         self._running = False
+        # Restore terminal settings FIRST
+        self._restore_terminal()
         if self._thread:
             self._thread.join(timeout=1)
             self._thread = None
+        if self._input_thread:
+            self._input_thread.join(timeout=0.2)
+            self._input_thread = None
         # Clear all lines we wrote (spinner + status)
         for _ in range(self._lines_written):
             sys.stdout.write(f"\033[A{self._CLEAR_LINE}")
@@ -99,8 +113,42 @@ class _ThinkingSpinner:
         sys.stdout.flush()
         self._lines_written = 0
 
+    def get_type_ahead(self) -> str:
+        """Return any text typed during spinning."""
+        return "".join(self._type_ahead)
+
     def update_label(self, label: str) -> None:
         self._label = label
+
+    def _restore_terminal(self) -> None:
+        """Restore terminal to original settings."""
+        if self._old_term_settings is not None:
+            try:
+                import termios
+                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN,
+                                  self._old_term_settings)
+            except Exception:
+                pass
+            self._old_term_settings = None
+
+    def _capture_input(self) -> None:
+        """Read keystrokes in raw mode without blocking the spinner."""
+        try:
+            import termios, tty, select
+            fd = sys.stdin.fileno()
+            self._old_term_settings = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+            while self._running:
+                rlist, _, _ = select.select([fd], [], [], 0.05)
+                if rlist:
+                    ch = sys.stdin.read(1)
+                    if ch == '\x7f' or ch == '\x08':  # backspace
+                        if self._type_ahead:
+                            self._type_ahead.pop()
+                    elif ch >= ' ':  # printable
+                        self._type_ahead.append(ch)
+        except Exception:
+            pass  # Not a TTY or termios unavailable
 
     def _animate(self) -> None:
         while self._running:
@@ -120,6 +168,10 @@ class _ThinkingSpinner:
                 try:
                     status = self._status_fn()
                     if status:
+                        # Inject type-ahead text into the ❯ line
+                        typed = "".join(self._type_ahead)
+                        if typed:
+                            status = status.replace("❯", f"❯ {typed}")
                         output += f"\n{status}"
                         lines += status.count("\n") + 1
                 except Exception:
@@ -169,6 +221,12 @@ class RealtimeTUI:
         if self._spinner:
             self._spinner.stop()
             self._spinner = None
+
+    def get_type_ahead(self) -> str:
+        """Return text typed during spinner."""
+        if self._spinner:
+            return self._spinner.get_type_ahead()
+        return ""
 
     def _register_hooks(self, react_agent) -> None:
         """Register rendering hooks on the agent instance."""

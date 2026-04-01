@@ -16,7 +16,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style as PTStyle
-from prompt_toolkit.patch_stdout import patch_stdout
+# patch_stdout removed — agent runs synchronously to avoid prompt/spinner conflicts
 
 from .commands import CommandRegistry
 from .renderer import (
@@ -678,88 +678,59 @@ async def run_repl(
         )
         return
 
-    # Main REPL loop — agent runs in background, prompt stays active
+    # Main REPL loop — double Ctrl+C to exit (like Claude Code)
     import time
     _last_ctrl_c = 0.0
-    _agent_task: asyncio.Task | None = None
-    _input_queue: list[str] = []
 
-    async def _run_queued(text_: str) -> None:
-        """Process input and then drain any queued messages."""
-        await _process_input(text_, agent, commands, ctx)
-        while _input_queue:
-            next_text = _input_queue.pop(0)
-            ctx["_current_input"] = next_text
-            await _process_input(next_text, agent, commands, ctx)
+    while True:
+        try:
+            # Separator line above ❯ (scrolls naturally with conversation)
+            console.print(f"[dim]{'─' * _get_term_width()}[/dim]")
 
-    with patch_stdout():
-        while True:
-            try:
-                # Separator line above ❯ (scrolls naturally with conversation)
-                console.print(f"[dim]{'─' * _get_term_width()}[/dim]")
+            # ❯ prompt with status toolbar below
+            # Pre-fill with any text typed during agent processing
+            prefill = ctx.pop("_type_ahead", "")
+            user_input = await prompt_session.prompt_async(
+                _build_prompt,
+                bottom_toolbar=_build_toolbar,
+                default=prefill,
+            )
 
-                # ❯ prompt with status toolbar below
-                user_input = await prompt_session.prompt_async(
-                    _build_prompt,
-                    bottom_toolbar=_build_toolbar,
-                )
+            if not user_input or not user_input.strip():
+                continue
+            ctx["_current_input"] = user_input.strip()
+            await _process_input(user_input.strip(), agent, commands, ctx)
 
-                if not user_input or not user_input.strip():
-                    continue
-
-                stripped = user_input.strip()
-                ctx["_current_input"] = stripped
-
-                # If agent is busy, queue the input
-                if _agent_task and not _agent_task.done():
-                    _input_queue.append(stripped)
-                    console.print("[dim]⏳ Queued — will process after current response.[/dim]")
-                    continue
-
-                # Process in background so prompt stays active
-                _agent_task = asyncio.create_task(_run_queued(stripped))
-
-            except KeyboardInterrupt:
-                now = time.time()
-                # Cancel running agent task on first Ctrl+C
-                if _agent_task and not _agent_task.done():
-                    _agent_task.cancel()
-                    console.print("\n[dim]Response interrupted.[/dim]")
-                    _last_ctrl_c = now
-                    continue
-                if now - _last_ctrl_c < 1.5:
-                    # Double Ctrl+C within 1.5s → exit
-                    session_mgr.save_session(
-                        session_id=session_id,
-                        metadata={"model": config.model.model_name},
-                    )
-                    render_info("Session saved. Goodbye!")
-                    break
-                else:
-                    _last_ctrl_c = now
-                    console.print("\n[dim]Press Ctrl+C again to exit.[/dim]")
-                    continue
-            except EOFError:
-                # Ctrl+D also exits gracefully
-                if _agent_task and not _agent_task.done():
-                    _agent_task.cancel()
+        except KeyboardInterrupt:
+            now = time.time()
+            if now - _last_ctrl_c < 1.5:
+                # Double Ctrl+C within 1.5s → exit
                 session_mgr.save_session(
                     session_id=session_id,
                     metadata={"model": config.model.model_name},
                 )
                 render_info("Session saved. Goodbye!")
                 break
-            except SystemExit:
-                if _agent_task and not _agent_task.done():
-                    _agent_task.cancel()
-                session_mgr.save_session(
-                    session_id=session_id,
-                    metadata={"model": config.model.model_name},
-                )
-                render_info("Session saved. Goodbye!")
-                break
-            except Exception as e:
-                render_error(f"Unexpected error: {e}")
+            else:
+                _last_ctrl_c = now
+                console.print("\n[dim]Press Ctrl+C again to exit.[/dim]")
+                continue
+        except EOFError:
+            session_mgr.save_session(
+                session_id=session_id,
+                metadata={"model": config.model.model_name},
+            )
+            render_info("Session saved. Goodbye!")
+            break
+        except SystemExit:
+            session_mgr.save_session(
+                session_id=session_id,
+                metadata={"model": config.model.model_name},
+            )
+            render_info("Session saved. Goodbye!")
+            break
+        except Exception as e:
+            render_error(f"Unexpected error: {e}")
 
     # Cleanup
     try:
@@ -964,6 +935,7 @@ async def _process_input(
     # Current user input text (set by _process_input for spinner display)
 
     def _spinner_status():
+        """Render separator + prompt + separator + status below spinner."""
         mode_mgr_ref = ctx.get("mode_mgr")
         tracker = ctx.get("token_tracker")
         cfg = ctx.get("config")
@@ -991,9 +963,7 @@ async def _process_input(
         usage_pct = min(100, int(tracker.total_tokens / max(max_ctx, 1) * 100))
         filled = usage_pct // 10
         bar = "█" * filled + "░" * (10 - filled)
-        # Full layout: separator → ❯ input → separator → status
-        cur_input = ctx.get("_current_input", "")
-        user_line = f"❯ {cur_input}" if cur_input else "❯"
+        user_line = "❯"
         return (
             f"\033[2m{sep}\033[0m\n"
             f"\033[1;38;5;141m{user_line}\033[0m\n"
@@ -1012,6 +982,11 @@ async def _process_input(
     try:
         tui = RealtimeTUI(console, status_fn=_spinner_status)
         response_msg = await tui.run_with_agent(agent, text)
+
+        # Capture any text typed during processing
+        type_ahead = tui.get_type_ahead()
+        if type_ahead:
+            ctx["_type_ahead"] = type_ahead
 
         if not response_msg:
             render_info("(No response from agent)")
