@@ -28,8 +28,46 @@ export ANTHROPIC_API_KEY=your-key-here
 # or
 export OPENAI_API_KEY=your-key-here
 
-# Run
+# Run (default REPL)
 python -m codeagent
+
+# Or with explicit run subcommand
+python -m codeagent run
+```
+
+## Launch Modes
+
+```bash
+# Basic REPL
+python -m codeagent run
+
+# With AgentScope Studio (web UI for monitoring)
+python -m codeagent run --studio auto          # Auto-launch Studio
+python -m codeagent run --studio http://host    # Connect to existing Studio
+python -m codeagent run --studio-port 7860      # Custom Studio port
+
+# With A2A (Agent-to-Agent) protocol server
+python -m codeagent run --a2a                   # Enable A2A server
+python -m codeagent run --a2a-port 7861         # Custom A2A port
+
+# Studio + A2A together
+python -m codeagent run --studio auto --a2a
+
+# Specify model and provider
+python -m codeagent run --model claude-sonnet-4-20250514 --provider anthropic
+python -m codeagent run --model gpt-4o --provider openai
+python -m codeagent run --model qwen-max --provider dashscope
+
+# Non-interactive mode (single prompt)
+python -m codeagent run --prompt "fix the bug in main.py"
+python -m codeagent "explain this codebase"
+
+# Resume a previous session
+python -m codeagent run --resume <session-id>
+
+# Setup and migration
+python -m codeagent setup                       # Interactive setup wizard
+python -m codeagent migrate                     # Migrate from Claude Code config
 ```
 
 ## Configuration
