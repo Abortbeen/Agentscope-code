@@ -51,8 +51,26 @@ Issues = "https://github.com/Abortbeen/Agentscope-code/issues"
 agentscope-code = "codeagent.__main__:main"
 asc = "codeagent.__main__:main"
 
-[tool.setuptools.packages.find]
-include = ["codeagent*"]
+[tool.setuptools]
+packages = [
+    "codeagent",
+    "codeagent.a2a",
+    "codeagent.agent",
+    "codeagent.cli",
+    "codeagent.config",
+    "codeagent.hooks",
+    "codeagent.memory",
+    "codeagent.observability",
+    "codeagent.permissions",
+    "codeagent.scheduler",
+    "codeagent.session",
+    "codeagent.skills",
+    "codeagent.tools",
+    "codeagent.utils",
+]
+
+[tool.setuptools.package-dir]
+"codeagent" = "."
 
 [tool.setuptools.package-data]
 codeagent = [

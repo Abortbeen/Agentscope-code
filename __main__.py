@@ -16,7 +16,10 @@ import argparse
 import asyncio
 import sys
 
-from . import __version__
+try:
+    from codeagent import __version__
+except ImportError:
+    __version__ = "0.1.0"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -159,8 +162,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
 
 def _cmd_run(args: argparse.Namespace) -> None:
     """Run the REPL."""
-    from .config.settings import load_config
-    from .cli.repl import run_repl
+    from codeagent.config.settings import load_config
+    from codeagent.cli.repl import run_repl
 
     config = load_config()
 
@@ -200,7 +203,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
 def _cmd_setup(args: argparse.Namespace) -> None:
     """Run the interactive setup wizard."""
-    from .cli.deploy import setup_codeagent
+    from codeagent.cli.deploy import setup_codeagent
     setup_codeagent(
         non_interactive=getattr(args, "non_interactive", False),
         provider=getattr(args, "provider", None),
@@ -210,7 +213,7 @@ def _cmd_setup(args: argparse.Namespace) -> None:
 
 def _cmd_migrate(args: argparse.Namespace) -> None:
     """Run Claude Code migration."""
-    from .cli.migrate import migrate_from_claude_code
+    from codeagent.cli.migrate import migrate_from_claude_code
 
     result = migrate_from_claude_code(
         source_dir=getattr(args, "source", None),
