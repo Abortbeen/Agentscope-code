@@ -134,22 +134,217 @@ Agentscope-Code features a Claude Code-style terminal interface built with `prom
 ## Configuration
 
 Configuration is loaded from (highest priority first):
-1. Environment variables (`CODEAGENT_MODEL`, `CODEAGENT_PROVIDER`)
-2. Project config (`.agent/settings.json`)
-3. Global config (`~/.config/codeagent/settings.json`)
+1. **Environment variables** — `CODEAGENT_MODEL`, `CODEAGENT_PROVIDER`
+2. **Project config** — `.agent/settings.json` (per-project)
+3. **Global config** — `~/.config/codeagent/settings.json` (all projects)
 
-Example `.agent/settings.json`:
+Run `asc setup` for interactive configuration, or create `.agent/settings.json` manually:
+
+```bash
+# Initialize project config
+asc init
+# Creates: .agent/settings.json, .agent/agents/, .agent/skills/
+```
+
+### Model Provider Examples
+
+<details>
+<summary><b>Anthropic (Claude)</b></summary>
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+```
+
+`.agent/settings.json`:
 ```json
 {
   "model": {
     "provider": "anthropic",
-    "model_name": "claude-sonnet-4-20250514"
-  },
-  "permissions": {
-    "mode": "default"
+    "model_name": "claude-sonnet-4-20250514",
+    "max_tokens": 8192
   }
 }
 ```
+
+Available models: `claude-opus-4-20250514`, `claude-sonnet-4-20250514`, `claude-3-5-haiku-20241022`
+
+</details>
+
+<details>
+<summary><b>OpenAI (GPT)</b></summary>
+
+```bash
+export OPENAI_API_KEY=sk-xxxxxxxxxxxx
+```
+
+`.agent/settings.json`:
+```json
+{
+  "model": {
+    "provider": "openai",
+    "model_name": "gpt-4o",
+    "max_tokens": 8192
+  }
+}
+```
+
+Available models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`
+
+</details>
+
+<details>
+<summary><b>DashScope (Qwen)</b></summary>
+
+```bash
+export DASHSCOPE_API_KEY=sk-xxxxxxxxxxxx
+```
+
+`.agent/settings.json`:
+```json
+{
+  "model": {
+    "provider": "dashscope",
+    "model_name": "qwen-max",
+    "max_tokens": 8192
+  }
+}
+```
+
+Available models: `qwen-max`, `qwen-plus`, `qwen-turbo`
+
+</details>
+
+<details>
+<summary><b>Google Gemini</b></summary>
+
+```bash
+export GOOGLE_API_KEY=AIzaxxxxxxxxxxxx
+```
+
+`.agent/settings.json`:
+```json
+{
+  "model": {
+    "provider": "gemini",
+    "model_name": "gemini-2.0-flash",
+    "max_tokens": 8192
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Ollama (Local Models)</b></summary>
+
+No API key needed. Start Ollama first: `ollama serve`
+
+`.agent/settings.json`:
+```json
+{
+  "model": {
+    "provider": "ollama",
+    "model_name": "llama3",
+    "base_url": "http://localhost:11434"
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Custom API Endpoint (OpenAI-compatible)</b></summary>
+
+For any OpenAI-compatible API (vLLM, LiteLLM, Azure, etc.):
+
+```bash
+export OPENAI_API_KEY=your-api-key
+```
+
+`.agent/settings.json`:
+```json
+{
+  "model": {
+    "provider": "openai",
+    "model_name": "your-model-name",
+    "base_url": "https://your-api-endpoint.com/v1",
+    "max_tokens": 8192,
+    "temperature": 0.0
+  }
+}
+```
+
+</details>
+
+### Full Configuration Reference
+
+`.agent/settings.json` supports all options:
+
+```json
+{
+  "model": {
+    "provider": "anthropic",
+    "model_name": "claude-sonnet-4-20250514",
+    "max_tokens": 8192,
+    "temperature": 0.0,
+    "stream": true,
+    "base_url": null
+  },
+  "permissions": {
+    "mode": "default",
+    "allow_rules": [
+      {"tool": "Bash", "pattern": "git *"},
+      {"tool": "Bash", "pattern": "npm *"}
+    ],
+    "deny_rules": [
+      {"tool": "Bash", "pattern": "rm -rf /*"}
+    ],
+    "sensitive_files": [".env", "*.pem", "*.key", "credentials*"]
+  },
+  "hooks": [],
+  "skills": {
+    "extra_dirs": [],
+    "disabled": []
+  },
+  "session": {
+    "storage_dir": null,
+    "max_sessions": 50
+  },
+  "memory": {
+    "memory_file": "AGENT.md",
+    "compression_threshold": 100000
+  },
+  "ui": {
+    "theme": "monokai",
+    "show_tokens": true,
+    "show_cost": true,
+    "markdown_output": true
+  },
+  "studio": {
+    "enabled": false,
+    "url": null,
+    "auto_launch": false,
+    "port": 7860
+  },
+  "a2a": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 7861
+  }
+}
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `DASHSCOPE_API_KEY` | DashScope (Qwen) API key |
+| `GOOGLE_API_KEY` | Google Gemini API key |
+| `CODEAGENT_MODEL` | Override model name |
+| `CODEAGENT_PROVIDER` | Override provider |
+| `CODEAGENT_PERMISSION_MODE` | Override permission mode |
 
 ## Commands
 
