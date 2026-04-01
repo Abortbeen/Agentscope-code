@@ -1,6 +1,7 @@
 # Agentscope-Code
 
 An AI coding agent built on [AgentScope](https://github.com/modelscope/agentscope) with Claude Code-style UI and oh-my-claudecode integration.
+![alt text](image.png)
 
 ## Features
 
@@ -69,6 +70,32 @@ python -m codeagent run --resume <session-id>
 python -m codeagent setup                       # Interactive setup wizard
 python -m codeagent migrate                     # Migrate from Claude Code config
 ```
+
+## TUI (Terminal UI)
+
+Agentscope-Code features a Claude Code-style terminal interface built with `prompt_toolkit` and `rich`:
+
+- **Real-time spinner** with 50+ random verbs (Brewing, Cogitating, Clauding...)
+- **Separator lines** above prompt for clean conversation boundaries
+- **Multi-line status bar** showing:
+  - Git branch
+  - Model name, session duration, token usage, cost
+  - Context usage bar (`ctx:[██░░░░░░░░]15%`)
+  - Tool count
+  - Current mode with `shift+tab to cycle`
+- **Mode cycling** — `Shift+Tab` switches between Auto / Plan / Manual
+- **Slash command autocomplete** — type `/` then `Tab` to complete commands, skills, agents
+- **Tool call visualization** — Claude Code-style with `●` prefix and `⎿` tree connectors:
+  ```
+  ● Reading 1 file...
+    ⎿  base_worker.py
+  ● Running...
+    ⎿  $ python test.py
+  ● Editing main.py...
+    ⎿  /path/to/main.py
+  ```
+- **Processing timer** — `✻ Brewed for 12s` after each response
+- **Response prefix** — `●` bullet for agent output (Claude Code style)
 
 ## Configuration
 
